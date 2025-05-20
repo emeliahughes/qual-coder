@@ -36,3 +36,28 @@
     transform: rotate(360deg);
   }
 }
+
+html, body, #root {
+    height: 100%;
+    margin: 0;
+  }
+  
+.custom-gutter {
+    width: 12px;
+    height: 100%;
+    background-color: #f8f9fa;
+    cursor: col-resize;
+  
+    display: flex;
+    align-items: center;      /* center vertically */
+    justify-content: center;  /* center horizontally */
+  }
+  
+  .gutter-icon {
+    font-size: 3rem;
+    color: #888;
+    line-height: 1;
+    user-select: none;
+    pointer-events: none;
+  }
+  
