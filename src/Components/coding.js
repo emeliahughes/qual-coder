@@ -64,6 +64,7 @@ export default function TikTokCodingTool() {
 		};
 	}, [currentIndex]);
 
+
 	// Initialize default coding schema
 	const [categories, setCategories] = useState({
 		'Type of Video': ['Funny', 'Happy', 'Sad'],
@@ -182,7 +183,7 @@ export default function TikTokCodingTool() {
 					direction="horizontal"
 					gutter={() => {
 						const gutter = document.createElement('div');
-						gutter.className = 'custom-gutter d-flex align-items-center mx-2';
+						gutter.className = 'custom-gutter d-flex align-items-center me-2';
 
 						const icon = document.createElement('div');
 						icon.className = 'gutter-icon h2 me-2 mb-0';
@@ -197,9 +198,20 @@ export default function TikTokCodingTool() {
 						<div className="row flex-grow-1 h-100">
 						{/* TikTok Embed */}
 						<div className="col-md-6 d-flex flex-column h-100">
-							<div className="overflow-auto flex-grow-1 p-3">
-							<TikTokEmbed video={currentVideo} />
+							<div
+								className="p-3"
+								style={{
+									flex: 1,
+									minHeight: 0,
+									overflow: 'auto',
+									maxHeight: '100%',
+								}}
+								>
+								<div style={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}>
+									<TikTokEmbed video={currentVideo} />
+								</div>
 							</div>
+
 						</div>
 
 						{/* Metadata */}
