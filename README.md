@@ -72,27 +72,28 @@ Your CSV must include the following fields:
 - [ ] Support keyboard shortcuts for tagging
 - [ ] Add option to remove or hide videos from the coding queue
 - [ ] Implement autosave confirmation when navigating
+- [ ] ⚠️ Show overwrite warning before submitting over an existing result
 
 ### 🌐 Backend Integration
-- [ ] Set up backend using Express/FastAPI/Next.js API routes
-- [ ] Upload CSVs from the UI and store them on the server
+- [X] Set up backend using Express/FastAPI/Next.js API routes
+- [X] Upload CSVs from the UI and store them on the server
 - [ ] Store and retrieve responses per coder from a backend DB (e.g., Firebase, Supabase, PostgreSQL)
 - [ ] Automatically detect and handle large datasets (pagination or lazy load)
 
 ### 🗃 Multi-Project Support
-- [ ] Create project-level abstraction to handle multiple datasets
-- [ ] Add project selection screen with metadata and progress
+- [X] Create project-level abstraction to handle multiple datasets
+- [X] Add project selection screen with metadata and progress
 - [ ] Store coding schemas and coders separately per project
 
 ### 🏠 UI Improvements
-- [ ] Add a homepage/dashboard with recent projects
+- [X] Add a homepage/dashboard with recent projects
 - [ ] Improve styling of tag selection and editing interface
 - [ ] Make embed and metadata layout responsive on smaller screens
 - [ ] Add visual indicator for coded vs. uncoded videos
 
 ### 👥 Coder Workflow
-- [ ] Allow coders to “complete” videos and filter by status
-- [ ] Assign videos to coders in round-robin or manual fashion
+- [X] Allow coders to “complete” videos and filter by status
+- [X] Assign videos to coders in round-robin or manual fashion
 - [ ] Add coder progress overview (e.g., 35/120 completed)
 
 ### 🔐 Authentication (Optional)
