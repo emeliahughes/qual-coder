@@ -1,266 +1,261 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate, BrowserRouter as Router } from 'react-router-dom';
 import Papa from 'papaparse';
 import CodingForm from './CodingForm';
 import FooterNav from './FooterNav';
 import TikTokEmbed from './TikTokEmbed';
 import TikTokMetadata from './MetaData';
-import CoderNameInput from './CoderName';
-import { Modal, Button } from 'react-bootstrap'; // ✅ Import Bootstrap modal
+import { Modal, Button } from 'react-bootstrap';
 import Split from 'react-split';
-import { GripVertical } from 'react-bootstrap-icons';
+import { ArrowLeft } from 'react-bootstrap-icons';
 import ReactDOM from 'react-dom';
+import { API_BASE_URL } from './api';
+import axios from 'axios';
+import ProjectEditorModal from './ProjectEditorModal';
 
+export default TikTokCodingTool;
 
+function TikTokCodingTool() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const project = location.state?.project;
+  const initialCoder = location.state?.coderName || '';
 
-export default function TikTokCodingTool() {
-	// Track coder identity and validation
-	const [previousCoderName, setPreviousCoderName] = useState('');
-	const [showWarningModal, setShowWarningModal] = useState(false); // ✅ updated
+  const [previousCoderName, setPreviousCoderName] = useState('');
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showProjectEditor, setShowProjectEditor] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [videos, setVideos] = useState([]);
+  const [projectData, setProjectData] = useState(project);
+  const [categories, setCategories] = useState(() => {
+    const raw = project?.codebook || [];
+    const formatted = {};
+    raw.forEach((c) => {
+      formatted[c.category] = c.tags.map((t) => t.tag);
+    });
+    return formatted;
+  });
+  const [coderName, setCoderName] = useState(initialCoder);
+  const [responses, setResponses] = useState(() => {
+    const stored = localStorage.getItem('responses');
+    return stored ? JSON.parse(stored) : {};
+  });
 
-	// Navigation and video dataset state
-	const [currentIndex, setCurrentIndex] = useState(0);
-	const [videos, setVideos] = useState([]);
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/api/video-at-index`, {
+      params: {
+        project: project.slug,
+        coder: coderName,
+        index: currentIndex
+      }
+    })
+      .then(res => {
+        setVideos((prev) => {
+          const updated = [...prev];
+          updated[currentIndex] = res.data;
+          return updated;
+        });
+      })
+      .catch(err => console.error("Video fetch error:", err));
+  }, [currentIndex, project, coderName]);
 
-	// Load and parse CSV dataset on mount
-	useEffect(() => {
-		fetch('/data/tiktok_data.csv')
-			.then(res => res.text())
-			.then(csv => {
-				Papa.parse(csv, {
-					error: (err) => console.error("CSV parse error:", err),
-					header: true,
-					skipEmptyLines: true,
-					complete: (results) => {
-						const cleaned = results.data
-							.filter(v => v.id && v.webVideoUrl)
-							.map((v) => ({
-								id: v.id,
-								url: v.webVideoUrl,
-								metadata: {
-									description: v.text,
-									author: v.author_name,
-									like_count: Number(v.diggCount),
-									view_count: Number(v.playCount),
-									comment_count: Number(v.commentCount),
-									share_count: Number(v.shareCount),
-									save_count: Number(v.collectCount),
-									create_time: new Date(Number(v.createTime) * 1000).toLocaleString(),
-								}
-							}));
-						setVideos(cleaned);
-					}
-				});
-			});
-	}, []);
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://www.tiktok.com/embed.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, [currentIndex]);
 
-	// Dynamically load TikTok embed script on video change
-	useEffect(() => {
-		const script = document.createElement('script');
-		script.src = 'https://www.tiktok.com/embed.js';
-		script.async = true;
-		document.body.appendChild(script);
-		return () => {
-			document.body.removeChild(script);
-		};
-	}, [currentIndex]);
+  if (!videos[currentIndex]) return <div className='p-4'>Loading video...</div>;
 
+  const currentVideo = videos[currentIndex];
+  const currentResponse = responses[currentVideo.id]?.[coderName] || {};
 
-	// Initialize default coding schema
-	const [categories, setCategories] = useState({
-		'Type of Video': ['Funny', 'Happy', 'Sad'],
-	});
+  const saveResponses = (updatedResponses) => {
+    setResponses(updatedResponses);
+    axios.post(`${API_BASE_URL}/api/save-progress`, {
+      project: project.slug,
+      coder: coderName,
+      video_id: currentVideo.id,
+      response: updatedResponses[currentVideo.id]?.[coderName]
+    }).catch(console.error);
+  };
 
-	// Track coder input and prior saved responses
-	const [coderName, setCoderName] = useState('');
-	const [responses, setResponses] = useState(() => {
-		const stored = localStorage.getItem('responses');
-		return stored ? JSON.parse(stored) : {};
-	});
+  const addCategory = (name) => {
+    if (!categories[name]) {
+      setCategories({ ...categories, [name]: [] });
+    }
+  };
 
-	// Guard render until data is loaded
-	if (!videos.length) return <div className='p-4'>Loading videos...</div>;
+  const addResponseOption = (category, option) => {
+    if (categories[category] && !categories[category].includes(option)) {
+      setCategories({
+        ...categories,
+        [category]: [...categories[category], option],
+      });
+    }
+  };
 
-	// Access current video and response state
-	const currentVideo = videos[currentIndex];
-	const currentResponse = responses[currentVideo.id]?.[coderName] || {};
+  const updateResponse = (category, values) => {
+    if (!coderName.trim()) {
+      setShowWarningModal(true);
+      return;
+    }
+    const updated = {
+      ...responses,
+      [currentVideo.id]: {
+        ...(responses[currentVideo.id] || {}),
+        [coderName]: {
+          ...(responses[currentVideo.id]?.[coderName] || {}),
+          [category]: values,
+        },
+      },
+    };
+    saveResponses(updated);
+  };
 
-	// Save updated responses to localStorage
-	const saveResponses = (updatedResponses) => {
-		setResponses(updatedResponses);
-		localStorage.setItem('responses', JSON.stringify(updatedResponses));
-	};
+  const handleNoteChange = (e) => {
+    if (!coderName.trim()) {
+      setShowWarningModal(true);
+      return;
+    }
+    const updated = {
+      ...responses,
+      [currentVideo.id]: {
+        ...(responses[currentVideo.id] || {}),
+        [coderName]: {
+          ...(responses[currentVideo.id]?.[coderName] || {}),
+          notes: e.target.value,
+        },
+      },
+    };
+    saveResponses(updated);
+  };
 
-	// Add new code categories dynamically
-	const addCategory = (name) => {
-		if (!categories[name]) {
-			setCategories({ ...categories, [name]: [] });
-		}
-	};
+  const goToVideo = (newIndex) => {
+    if (!coderName.trim()) {
+      setShowWarningModal(true);
+      return;
+    }
+    const updatedResponses = {
+      ...responses,
+      [currentVideo.id]: {
+        ...(responses[currentVideo.id] || {}),
+        [coderName]: currentResponse
+      }
+    };
+    saveResponses(updatedResponses);
+    setCurrentIndex(newIndex);
+  };
 
-	// Add new options to a code category
-	const addResponseOption = (category, option) => {
-		if (categories[category] && !categories[category].includes(option)) {
-			setCategories({
-				...categories,
-				[category]: [...categories[category], option],
-			});
-		}
-	};
+  const handleSaveProject = (updatedProject) => {
+    setProjectData(updatedProject);
+    const updated = {};
+    updatedProject.codebook.forEach((c) => {
+      updated[c.category] = c.tags.map((t) => t.tag);
+    });
+    setCategories(updated);
+  };
 
-	// Update current coder's response for the video
-	const updateResponse = (category, values) => {
-		if (!coderName.trim()) {
-			setShowWarningModal(true); // ✅ show modal if no coder
-			return;
-		}
-		const updated = {
-			...responses,
-			[currentVideo.id]: {
-				...(responses[currentVideo.id] || {}),
-				[coderName]: {
-					...(responses[currentVideo.id]?.[coderName] || {}),
-					[category]: values,
-				},
-			},
-		};
-		saveResponses(updated);
-	};
+  return (
+    <div className="d-flex flex-column vh-100">
+      <div className="container-fluid flex-grow-1 d-flex flex-column h-100">
+        {/* Header */}
+        <div className="row justify-content-between align-items-center border-bottom p-3">
+          <div className="col-auto">
+            <Button variant="outline-secondary" onClick={() => navigate('/')}> <ArrowLeft className="me-2" />Back</Button>
+          </div>
+          <div className="col text-center">
+            <h5 className="mb-0">{project?.name || 'Project'}</h5>
+            <small className="text-muted">Coder: {coderName}</small>
+          </div>
+          <div className="col" />
+        </div>
 
-	// Track freeform notes
-	const handleNoteChange = (e) => {
-		if (!coderName.trim()) {
-			setShowWarningModal(true); // ✅ show modal if no coder
-			return;
-		}
-		const updated = {
-			...responses,
-			[currentVideo.id]: {
-				...(responses[currentVideo.id] || {}),
-				[coderName]: {
-					...(responses[currentVideo.id]?.[coderName] || {}),
-					notes: e.target.value,
-				},
-			},
-		};
-		saveResponses(updated);
-	};
+        <Split
+          className="flex-grow-1 d-flex"
+          style={{ height: '100%' }}
+          sizes={[66, 34]}
+          minSize={200}
+          gutterSize={12}
+          direction="horizontal"
+          gutter={() => {
+            const gutter = document.createElement('div');
+            gutter.className = 'custom-gutter d-flex align-items-center me-2';
 
-	// Navigation with coder name required
-	const goToVideo = (newIndex) => {
-		if (!coderName.trim()) {
-			setShowWarningModal(true); // ✅ show modal if no coder
-			return;
-		}
-		setCurrentIndex(newIndex);
-	};
+            const icon = document.createElement('div');
+            icon.className = 'gutter-icon h2 me-2 mb-0';
+            icon.textContent = '⋮';
+            gutter.appendChild(icon);
 
-	// Track prior coders to allow re-selection
-	const previousCoders = Array.from(new Set(Object.values(responses).flatMap(v => Object.keys(v))));
+            return gutter;
+          }}
+        >
+          {/* Left column */}
+          <div className="d-flex flex-column h-100 w-100">
+            <div className="row flex-grow-1 h-100">
+              <div className="col-md-6 d-flex flex-column h-100">
+                <div className="p-3" style={{ flex: 1, minHeight: 0, overflow: 'auto', maxHeight: '100%' }}>
+                  <div style={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}>
+                    <TikTokEmbed video={currentVideo} />
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-6 overflow-auto p-3 h-100">
+                <TikTokMetadata metadata={currentVideo.metadata} />
+              </div>
+            </div>
+          </div>
 
-	return (
-		<div className="d-flex flex-column vh-100" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-			{/* Main content container */}
-			<div className="container-fluid flex-grow-1 d-flex flex-column h-100" style={{ flex: 1, height: '100vh', overflow: 'hidden' }}>
-				{/* Header row */}
-				<div className="row justify-content-between align-items-center border-bottom p-3">
-					<CoderNameInput
-						coderName={coderName}
-						setCoderName={setCoderName}
-						previousCoderName={previousCoderName}
-						setPreviousCoderName={setPreviousCoderName}
-						previousCoders={previousCoders}
-						showWarningModal={showWarningModal}
-						setShowWarningModal={setShowWarningModal}
-					/>
-				</div>
+          {/* Right column */}
+          <div className="border-start overflow-auto p-3 h-100">
+            <CodingForm
+              key={`${currentVideo.id}-${coderName}`}
+              categories={categories}
+              currentResponse={currentResponse}
+              coderName={coderName}
+              setShowWarning={setShowWarningModal}
+              addResponseOption={addResponseOption}
+              addCategory={addCategory}
+              updateResponse={updateResponse}
+              handleNoteChange={handleNoteChange}
+              projectSlug={project.slug}
+              videoId={currentVideo.id}
+              project={projectData}
+              onSaveProject={handleSaveProject}
+            />
+          </div>
+        </Split>
 
-				<Split
-					className="flex-grow-1 d-flex"
-					style={{ height: '100%' }}
-					sizes={[66, 34]}
-					minSize={200}
-					gutterSize={12}
-					direction="horizontal"
-					gutter={() => {
-						const gutter = document.createElement('div');
-						gutter.className = 'custom-gutter d-flex align-items-center me-2';
+        <div className="row justify-content-between align-items-center border-top p-3">
+          <FooterNav
+            coderName={coderName}
+            currentIndex={currentIndex}
+            videos={videos}
+            goToVideo={goToVideo}
+            projectSlug={project.slug}
+            videoId={currentVideo.id}
+            currentResponse={currentResponse}
+            />
+        </div>
+      </div>
 
-						const icon = document.createElement('div');
-						icon.className = 'gutter-icon h2 me-2 mb-0';
-						icon.textContent = '⋮';
-						gutter.appendChild(icon);
-
-						return gutter;
-					}}
-				>
-					{/* Left column (Video + Metadata) */}
-					<div className="d-flex flex-column h-100 w-100">
-						<div className="row flex-grow-1 h-100">
-						{/* TikTok Embed */}
-						<div className="col-md-6 d-flex flex-column h-100">
-							<div
-								className="p-3"
-								style={{
-									flex: 1,
-									minHeight: 0,
-									overflow: 'auto',
-									maxHeight: '100%',
-								}}
-								>
-								<div style={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}>
-									<TikTokEmbed video={currentVideo} />
-								</div>
-							</div>
-
-						</div>
-
-						{/* Metadata */}
-						<div className="col-md-6 overflow-auto p-3 h-100">
-							<TikTokMetadata metadata={currentVideo.metadata} />
-						</div>
-						</div>
-					</div>
-
-					{/* Right column (Form) */}
-					<div className="border-start overflow-auto p-3 h-100">
-						<CodingForm
-						categories={categories}
-						currentResponse={currentResponse}
-						coderName={coderName}
-						setShowWarning={setShowWarningModal}
-						addResponseOption={addResponseOption}
-						addCategory={addCategory}
-						updateResponse={updateResponse}
-						handleNoteChange={handleNoteChange}
-						/>
-					</div>
-				</Split>
-
-				{/* Footer Navigation */}
-				<div className="row justify-content-between align-items-center border-top p-3">
-					<FooterNav
-						coderName={coderName}
-						currentIndex={currentIndex}
-						videos={videos}
-						goToVideo={goToVideo}
-					/>
-				</div>
-			</div>
-
-			{/* Warning Modal */}
-			<Modal show={showWarningModal} onHide={() => setShowWarningModal(false)} centered>
-				<Modal.Header closeButton>
-					<Modal.Title>Coder Name Required</Modal.Title>
-				</Modal.Header>
-				<Modal.Body>
-					Please enter your coder name before tagging or making notes.
-				</Modal.Body>
-				<Modal.Footer>
-					<Button variant="primary" onClick={() => setShowWarningModal(false)}>
-						OK
-					</Button>
-				</Modal.Footer>
-			</Modal>
-		</div>
-	);
+      <Modal show={showWarningModal} onHide={() => setShowWarningModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Coder Name Required</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Please enter your coder name before tagging or making notes.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={() => setShowWarningModal(false)}>
+            OK
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </div>
+  );
 }
