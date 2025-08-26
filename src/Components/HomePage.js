@@ -356,8 +356,15 @@ export default function HomePage() {
                 <Button variant="outline-primary" onClick={() => handleDownload('codebook')} className="me-2">
                   Download Codebook
                 </Button>
-                <Button variant="outline-success" onClick={() => handleDownload('results')}>
+                <Button variant="outline-success" onClick={() => handleDownload('results')} className="me-2">
                   Download Results
+                </Button>
+                <Button 
+                  variant="outline-info" 
+                  onClick={() => navigate('/results', { state: { project: selectedProject } })}
+                  disabled={!selectedProject}
+                >
+                  View Results
                 </Button>
               </div>
               <Button
