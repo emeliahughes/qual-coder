@@ -69,21 +69,20 @@ Your CSV must include the following fields:
 
 ### 🔄 Core Functionality
 - [ ] Export coded data to CSV or JSON format
-- [ ] Support keyboard shortcuts for tagging
 - [ ] Add option to remove or hide videos from the coding queue
 - [ ] Implement autosave confirmation when navigating
-- [ ] ⚠️ Show overwrite warning before submitting over an existing result
+- [ ] Collapse the difference between the submit and sa
 
 ### 🌐 Backend Integration
-- [X] Set up backend using Express/FastAPI/Next.js API routes
+- [X] Set up backend using Flask API routes
 - [X] Upload CSVs from the UI and store them on the server
-- [ ] Store and retrieve responses per coder from a backend DB (e.g., Firebase, Supabase, PostgreSQL)
+- [X] Store and retrieve responses per coder from SQLite via Flask API
 - [ ] Automatically detect and handle large datasets (pagination or lazy load)
 
 ### 🗃 Multi-Project Support
 - [X] Create project-level abstraction to handle multiple datasets
 - [X] Add project selection screen with metadata and progress
-- [ ] Store coding schemas and coders separately per project
+- [X] Store coding schemas and coders separately per project
 
 ### 🏠 UI Improvements
 - [X] Add a homepage/dashboard with recent projects
@@ -96,10 +95,6 @@ Your CSV must include the following fields:
 - [X] Assign videos to coders in round-robin or manual fashion
 - [ ] Add coder progress overview (e.g., 35/120 completed)
 
-### 🔐 Authentication (Optional)
-- [ ] Add lightweight authentication for coders
-- [ ] Store coder identities securely on backend
-- [ ] Provide unique links or logins for each coder
 
 ---
 

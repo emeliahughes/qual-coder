@@ -8,7 +8,6 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
   const isNew = !project;
   const [projectName, setProjectName] = useState('');
   const [coders, setCoders] = useState([]);
-  const [newCoder, setNewCoder] = useState('');
   const [codebook, setCodebook] = useState([]);
   const [fileQueue, setFileQueue] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState('');
@@ -28,21 +27,6 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
     }
   }, [project, show]);
 
-  const handleAddCoder = async () => {
-    if (newCoder.trim() && project?.slug) {
-      try {
-        await axios.post(`${API_BASE_URL}/api/coder`, {
-          project: project.slug,
-          coder: newCoder.trim()
-        });
-        setCoders([...coders, newCoder.trim()]);
-        setNewCoder('');
-        triggerToast('Coder added successfully.');
-      } catch (err) {
-        console.error('Error adding coder:', err);
-      }
-    }
-  };
 
   const handleRemoveCoder = async (name) => {
     if (window.confirm(`Are you sure you want to remove ${name}?`) && project?.slug) {
@@ -67,11 +51,11 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
     setFileQueue([...fileQueue, ...validFiles]);
   };
 
-  const uploadFiles = async () => {
+  const uploadFiles = async (slugToUse) => {
     for (const file of fileQueue) {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('project', project.slug);
+      formData.append('project', slugToUse);
       try {
         await axios.post(`${API_BASE_URL}/api/upload-data`, formData);
         triggerToast(`Uploaded: ${file.name}`);
@@ -82,8 +66,6 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
   };
 
   const handleSubmit = async () => {
-    if (fileQueue.length > 0 && !isNew) await uploadFiles();
-
     try {
       const payload = {
         name: projectName,
@@ -91,13 +73,21 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
         codebook
       };
 
+      let slugForUploads = project?.slug;
+
       if (isNew) {
-        await axios.post(`${API_BASE_URL}/api/projects`, payload);
+        const res = await axios.post(`${API_BASE_URL}/api/projects`, payload);
+        slugForUploads = res?.data?.slug;
       } else {
         await axios.put(`${API_BASE_URL}/api/project/${project.slug}`, payload);
       }
+
+      if (fileQueue.length > 0 && slugForUploads) {
+        await uploadFiles(slugForUploads);
+      }
+
       triggerToast('Project saved.');
-      onSave(payload);
+      onSave({ ...payload, slug: slugForUploads || project?.slug });
       onClose();
     } catch (err) {
       console.error('Failed to save project:', err);
@@ -171,14 +161,6 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
 
             <Form.Group className="mb-3">
               <Form.Label>Coders</Form.Label>
-              <InputGroup className="mb-2">
-                <Form.Control
-                  placeholder="Add coder name"
-                  value={newCoder}
-                  onChange={(e) => setNewCoder(e.target.value)}
-                />
-                <Button onClick={handleAddCoder}>Add</Button>
-              </InputGroup>
               <ListGroup>
                 {coders.map((name, idx) => (
                   <ListGroup.Item key={idx} className="d-flex justify-content-between align-items-center">
@@ -246,11 +228,6 @@ export default function ProjectEditorModal({ show, onClose, project, onSave, onD
                 <Button onClick={handleAddCategory}>+ Add Category</Button>
               </div>
             </Form.Group>
-
-            <div className="mt-3 d-flex gap-2">
-              <Button variant="outline-primary" onClick={() => handleDownload('codebook')}>Download Codebook</Button>
-              <Button variant="outline-success" onClick={() => handleDownload('results')}>Download Results</Button>
-            </div>
           </Form>
         </Modal.Body>
 

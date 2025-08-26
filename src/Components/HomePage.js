@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Col, Row, ListGroup, ProgressBar } from 'react-bootstrap';
+import { Button, Card, Col, Row, ListGroup, Form } from 'react-bootstrap';
 import { PencilSquare } from 'react-bootstrap-icons';
 import axios from 'axios';
 import ProjectEditorModal from './ProjectEditorModal';
@@ -14,14 +14,39 @@ export default function HomePage() {
   const [selectedCoder, setSelectedCoder] = useState('');
   const [showProjectEditor, setShowProjectEditor] = useState(false);
   const [editingProjectIndex, setEditingProjectIndex] = useState(null);
+  const [codebook, setCodebook] = useState([]);
 
   const selectedProject = selectedProjectIndex !== null ? projects[selectedProjectIndex] : null;
 
-  useEffect(() => {
+  const loadProjects = () => {
     axios.get(`${API_BASE_URL}/api/projects`)
       .then(res => setProjects(res.data))
       .catch(err => console.error('Failed to load projects:', err));
+  };
+
+  useEffect(() => {
+    loadProjects();
   }, []);
+
+  // Refresh projects when the page becomes visible (e.g., when returning from coding page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadProjects();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      axios.get(`${API_BASE_URL}/api/project-info?project=${selectedProject.slug}`)
+        .then(res => setCodebook(res.data.codebook || []))
+        .catch(err => console.error('Failed to load codebook:', err));
+    }
+  }, [selectedProject]);
 
   const handleSaveProject = (updatedProject) => {
     const method = editingProjectIndex !== null ? 'put' : 'post';
@@ -61,38 +86,118 @@ export default function HomePage() {
 
   const calculateProgress = (project, coder) => {
     const totalVideos = project.video_count || 0;
-    const coderCompleted = project.responses?.[coder]?.length || 0;
+    const coderResponses = project.responses?.[coder] || [];
+    
+    // Count different types of responses
+    let submitted = 0;
+    let saved = 0;
+    let excluded = 0;
+    
+    coderResponses.forEach(response => {
+      if (typeof response === 'object' && response.excluded) {
+        excluded++;
+      } else if (typeof response === 'object' && response.status === 'submitted') {
+        submitted++;
+      } else {
+        saved++; // draft status
+      }
+    });
+    
+    const completed = submitted + excluded; // Total completed (submitted + excluded)
+    const coderPercent = totalVideos ? Math.round((completed / totalVideos) * 100) : 0;
+    
+    // Calculate overall progress across all coders
     const totalRequired = totalVideos * (project.coders?.length || 1);
-    const totalCompleted = project.coders?.reduce((sum, name) => sum + (project.responses?.[name]?.length || 0), 0) || 0;
-
-    const coderPercent = totalVideos ? Math.round((coderCompleted / totalVideos) * 100) : 0;
+    let totalCompleted = 0;
+    let totalSubmitted = 0;
+    let totalSaved = 0;
+    let totalExcluded = 0;
+    
+    project.coders?.forEach(name => {
+      const responses = project.responses?.[name] || [];
+      responses.forEach(response => {
+        if (typeof response === 'object' && response.excluded) {
+          totalExcluded++;
+          totalCompleted++; // Count excluded toward completion
+        } else if (typeof response === 'object' && response.status === 'submitted') {
+          totalSubmitted++;
+          totalCompleted++; // Count submitted toward completion
+        } else {
+          totalSaved++; // Count saved/draft responses for display
+        }
+      });
+    });
+    
     const overallPercent = totalRequired ? Math.round((totalCompleted / totalRequired) * 100) : 0;
 
-    return { coderCompleted, totalVideos, coderPercent, totalCompleted, totalRequired, overallPercent };
+    return { 
+      submitted, 
+      saved, 
+      excluded, 
+      completed, 
+      totalVideos, 
+      coderPercent, 
+      totalSubmitted, 
+      totalSaved,
+      totalExcluded, 
+      totalCompleted, 
+      totalRequired, 
+      overallPercent 
+    };
   };
 
-  const progress = selectedProject && selectedCoder ? calculateProgress(selectedProject, selectedCoder) : null;
+  const handleDownload = (type) => {
+    if (!selectedProject?.slug) return;
+    const url = `${API_BASE_URL}/api/download-${type}?project=${selectedProject.slug}`;
+    window.open(url, '_blank');
+  };
+
+  const renderProgressBar = (submitted, saved, excluded, total, isOverall = false) => {
+    if (total === 0) return <div className="progress" style={{ height: isOverall ? '25px' : '20px' }}><div className="progress-bar bg-secondary" style={{ width: '100%' }}>No videos</div></div>;
+    
+    const submittedPercent = (submitted / total) * 100;
+    const savedPercent = (saved / total) * 100;
+    const excludedPercent = (excluded / total) * 100;
+    
+    return (
+      <div className={`progress ${isOverall ? 'border-2 border-primary' : ''}`} style={{ height: isOverall ? '25px' : '20px' }}>
+        {submitted > 0 && (
+          <div 
+            className="progress-bar" 
+            style={{ 
+              width: `${submittedPercent}%`, 
+              backgroundColor: '#198754' // green for submitted
+            }}
+          />
+        )}
+        {saved > 0 && (
+          <div 
+            className="progress-bar" 
+            style={{ 
+              width: `${savedPercent}%`, 
+              backgroundColor: '#ffc107' // yellow for saved
+            }}
+          />
+        )}
+        {excluded > 0 && (
+          <div 
+            className="progress-bar" 
+            style={{ 
+              width: `${excludedPercent}%`, 
+              backgroundColor: '#dc3545' // red for excluded
+            }}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="container py-4">
       <Row>
         <Col md={4}>
-          <Card>
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <span>Projects</span>
-              {selectedProject && (
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditingProjectIndex(selectedProjectIndex);
-                    setShowProjectEditor(true);
-                  }}
-                >
-                  <PencilSquare size={16} className="me-1" />
-                </Button>
-              )}
-            </Card.Header>
+          <Card className="mb-3">
+            <Card.Header>Projects</Card.Header>
             <ListGroup variant="flush">
               {projects.map((proj, index) => (
                 <ListGroup.Item
@@ -109,106 +214,152 @@ export default function HomePage() {
               </ListGroup.Item>
             </ListGroup>
           </Card>
+
+          {selectedProject && (
+            <Card>
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <span>Project Stats</span>
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  onClick={() => {
+                    setEditingProjectIndex(selectedProjectIndex);
+                    setShowProjectEditor(true);
+                  }}
+                >
+                  <PencilSquare className="me-1" /> Edit Project
+                </Button>
+              </Card.Header>
+              <Card.Body>
+                <div><strong>Coders:</strong></div>
+                <div>{selectedProject.coders?.join(', ') || 'None'}</div>
+                <div className="mt-2">
+                    <strong>Project Files:</strong>
+                    <ul className="mb-0">
+                        {selectedProject.project_files?.length > 0 ? 
+                            selectedProject.project_files.map((f, idx) => (
+                                <li key={idx}>{typeof f === "string" ? f : f.filename}</li>
+                            )) : 
+                            <li>None</li>
+                        }
+                    </ul>
+                </div>
+                <div className="mt-3 pb-2"><strong>Coder Progress:</strong></div>
+                {selectedProject.coders?.map((coder, idx) => {
+                  const prog = calculateProgress(selectedProject, coder);
+                  return (
+                    <div key={idx} className="mb-3">
+                      <div className="small text-muted">
+                        {coder} — {prog.completed} / {prog.totalVideos}
+                      </div>
+                      {renderProgressBar(prog.submitted, prog.saved, prog.excluded, prog.totalVideos, false)}
+                    </div>
+                  );
+                })}
+                <div className="mt-3">
+                  <div className="fw-semibold text-dark">
+                    Overall Progress — {
+                      calculateProgress(selectedProject, selectedCoder).totalCompleted
+                    } / {
+                      calculateProgress(selectedProject, selectedCoder).totalRequired
+                    }
+                  </div>
+                </div>
+                {renderProgressBar(
+                  calculateProgress(selectedProject, selectedCoder).totalSubmitted,
+                  calculateProgress(selectedProject, selectedCoder).totalSaved,
+                  calculateProgress(selectedProject, selectedCoder).totalExcluded,
+                  calculateProgress(selectedProject, selectedCoder).totalRequired,
+                  true
+                )}
+              </Card.Body>
+            </Card>
+          )}
         </Col>
 
         <Col md={8}>
-          <Row className="mb-3">
-            <Col>
-              <Card>
-                <Card.Header className="d-flex justify-content-between align-items-center">
-                  <span>Project Stats</span>
-                  {selectedProject && (
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={() => {
-                        setEditingProjectIndex(selectedProjectIndex);
-                        setShowProjectEditor(true);
+          {selectedProject && (
+            <Row className="mb-3">
+              <Col>
+                <Card>
+                  <Card.Header>Coder</Card.Header>
+                  <Card.Body>
+                    <Form.Control
+                      placeholder="Add a new coder name or select below"
+                      value={selectedCoder}
+                      onChange={(e) => setSelectedCoder(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (!selectedProject.coders.includes(selectedCoder)) {
+                            axios.post(`${API_BASE_URL}/api/coder`, {
+                              project: selectedProject.slug,
+                              coder: selectedCoder
+                            }).then(() => {
+                              const updated = { ...selectedProject };
+                              updated.coders = [...updated.coders, selectedCoder];
+                              const updatedProjects = [...projects];
+                              updatedProjects[selectedProjectIndex] = updated;
+                              setProjects(updatedProjects);
+                            }).catch(err => {
+                              console.error('Failed to add coder:', err);
+                            });
+                          }
+                        }
                       }}
-                    >
-                      <PencilSquare className="me-1" /> Edit Project
-                    </Button>
-                  )}
-                </Card.Header>
-                <Card.Body>
-                  {selectedProject ? (
-                    <>
-                      <div><strong>Coders:</strong> {selectedProject.coders?.join(', ') || 'None'}</div>
-                      <div className="mt-2"><strong>Progress:</strong></div>
-                      <div className="small text-muted">
-                        {selectedCoder || 'Current'} progress — {progress?.coderCompleted || 0} / {progress?.totalVideos || 0}
-                      </div>
-                      <ProgressBar 
-                        now={progress?.coderPercent || 0} 
-                        label={`${progress?.coderPercent || 0}%`} 
-                        className="mb-2" 
-                      />
-                      <div className="small text-muted">
-                        Overall progress — {progress?.totalCompleted || 0} / {progress?.totalRequired || 0}
-                      </div>
-                      <ProgressBar 
-                        now={progress?.overallPercent || 0} 
-                        label={`${progress?.overallPercent || 0}%`} 
-                      />
-                    </>
-                  ) : (
-                    <div className="text-muted">Select a project to see stats</div>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
+                    />
+                    <div className="mt-3 d-flex flex-wrap gap-2">
+                      {selectedProject.coders.map((coder, idx) => (
+                        <Button
+                          key={idx}
+                          variant={coder === selectedCoder ? "primary" : "outline-secondary"}
+                          size="sm"
+                          onClick={() => setSelectedCoder(coder)}
+                        >
+                          {coder}
+                        </Button>
+                      ))}
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          )}
 
           <Row className="mb-3">
             <Col>
               <Card>
-                <Card.Header>Coder</Card.Header>
+                <Card.Header>Codebook</Card.Header>
                 <Card.Body>
-                  <input
-                    className="form-control"
-                    placeholder="Enter your coder name"
-                    value={selectedCoder}
-                    onChange={(e) => {
-                      const newName = e.target.value;
-                      if (
-                        selectedProject &&
-                        selectedProject.coders?.includes(selectedCoder) &&
-                        newName.trim() !== selectedCoder.trim()
-                      ) {
-                        const confirm = window.confirm(
-                          `Change coder name from "${selectedCoder}" to "${newName}"? This will update all related data.`
-                        );
-                        if (confirm) {
-                          axios.put(`${API_BASE_URL}/api/coder`, {
-                            project: selectedProject.slug,
-                            old_name: selectedCoder,
-                            new_name: newName
-                          })
-                            .then(() => {
-                              const updated = { ...selectedProject };
-                              updated.coders = updated.coders.map(n => n === selectedCoder ? newName : n);
-                              const updatedProjects = [...projects];
-                              updatedProjects[selectedProjectIndex] = updated;
-                              setProjects(updatedProjects);
-                              setSelectedCoder(newName);
-                            })
-                            .catch(err => {
-                              console.error('Failed to update coder name:', err);
-                              alert('Failed to update coder name.');
-                            });
-                        }
-                      } else {
-                        setSelectedCoder(newName);
-                      }
-                    }}
-                  />
+                  {codebook.length === 0 ? (
+                    <div className="text-muted">No codebook defined for this project.</div>
+                  ) : (
+                    codebook.map((cat, i) => (
+                      <div key={i} className="mb-3">
+                        <strong>{cat.category}</strong>: {cat.description}
+                        <ul>
+                          {cat.tags.map((tagObj, j) => (
+                            <li key={j}><em>{tagObj.tag}</em> — {tagObj.description}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))
+                  )}
                 </Card.Body>
               </Card>
             </Col>
           </Row>
 
           <Row>
-            <Col className="text-end">
+            <Col className="d-flex justify-content-between align-items-center">
+              <div>
+                <Button variant="outline-primary" onClick={() => handleDownload('codebook')} className="me-2">
+                  Download Codebook
+                </Button>
+                <Button variant="outline-success" onClick={() => handleDownload('results')}>
+                  Download Results
+                </Button>
+              </div>
               <Button
                 variant="success"
                 disabled={!selectedProject || !selectedCoder.trim()}
