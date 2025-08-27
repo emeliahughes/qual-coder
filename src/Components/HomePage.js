@@ -55,9 +55,23 @@ export default function HomePage() {
       : `${API_BASE_URL}/api/projects`;
 
     axios[method](url, updatedProject)
-      .then(() => axios.get(`${API_BASE_URL}/api/projects`))
-      .then(res => setProjects(res.data))
-      .catch(err => console.error('Failed to save project:', err));
+      .then(res => {
+        console.log('Project saved successfully:', res.data);
+        if (editingProjectIndex !== null) {
+          // Update existing project
+          const updatedProjects = [...projects];
+          updatedProjects[editingProjectIndex] = res.data;
+          setProjects(updatedProjects);
+        } else {
+          // Add new project to the list
+          setProjects(prevProjects => [...prevProjects, res.data]);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to save project:', err);
+        // Fallback: reload all projects if there's an error
+        loadProjects();
+      });
 
     setShowProjectEditor(false);
     setEditingProjectIndex(null);
